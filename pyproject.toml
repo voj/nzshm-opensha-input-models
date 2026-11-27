@@ -1,0 +1,34 @@
+[project]
+name = "nzshm-model-checks"
+version = "0.1.0"
+description = "Checks for the immutable NZSHM input model collection"
+requires-python = ">=3.12"
+dependencies = ["jsonschema>=4.18,<5"]
+
+[project.scripts]
+check-pr = "model_checks.check_pr:main"
+model-meta = "model_checks.meta:main"
+new-models = "model_checks.new_models:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.0,<10.0.0",
+    "pytest-cov>=6.0.0",
+    "tox>=4.25.0",
+    "tox-uv>=1.0.0",
+    "tox-gh-actions>=3.0.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "model_checks"
+
+[tool.uv]
+# supply-chain cooldown: only resolve packages uploaded more than a week ago
+exclude-newer = "1 week"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
