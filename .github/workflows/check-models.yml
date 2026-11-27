@@ -1,0 +1,87 @@
+name: check-models
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  # manual run on a PR branch: Actions -> check-models -> Run workflow
+  workflow_dispatch:
+    inputs:
+      modify_models:
+        description: "Do not fail on modified models"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  BASE: ${{ github.base_ref || github.event.repository.default_branch }}
+
+jobs:
+  check:
+    name: check-models
+    runs-on: ubuntu-latest
+    steps:
+      # rules (script, configs, schemas) come from the base branch so a PR can't relax them
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.BASE }}
+          path: rules
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          path: pr
+
+      # Python + uv; uv pinned to a release older than a week (supply-chain cooldown).
+      # Dependencies come from rules/uv.lock, resolved with a 1-week cutoff (exclude-newer).
+      - uses: GNS-Science/nshm-github-actions/.github/actions/python-install-uv@main
+        with:
+          python-version: "3.12"
+          uv-version: "0.11.6"
+          working-directory: rules
+
+      - id: validator
+        run: |
+          echo "java=$(jq -r .java rules/config/validator.json)" >> "$GITHUB_OUTPUT"
+          echo "url=$(jq -r .url rules/config/validator.json)" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(jq -r .sha256 rules/config/validator.json)" >> "$GITHUB_OUTPUT"
+      # use a JDK preinstalled on the runner image (exposed as JAVA_HOME_<version>_X64)
+      - name: Select Java
+        run: |
+          var="JAVA_HOME_${{ steps.validator.outputs.java }}_X64"
+          home="${!var}"
+          if [ -z "$home" ]; then
+            echo "Java ${{ steps.validator.outputs.java }} not preinstalled; available:"; env | grep '^JAVA_HOME_'; exit 1
+          fi
+          echo "JAVA_HOME=$home" >> "$GITHUB_ENV"
+          echo "$home/bin" >> "$GITHUB_PATH"
+          "$home/bin/java" -version
+      - name: Fetch validator jar
+        run: |
+          # TODO: switch to `aws s3 cp` (with credentials) if the bucket isn't public over https
+          curl -fsSL -o validator.jar "${{ steps.validator.outputs.url }}"
+          echo "${{ steps.validator.outputs.sha256 }}  validator.jar" | sha256sum -c -
+
+      # manual runs have no PR context, so look up the labels of the branch's open PR
+      - name: PR labels
+        id: labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            labels="$EVENT_LABELS"
+          else
+            labels=$(gh pr list --repo "${{ github.repository }}" --head "${{ github.ref_name }}" \
+                     --state open --json labels --jq '[.[0].labels[]?.name]')
+          fi
+          echo "labels=$(jq -c . <<< "$labels")" >> "$GITHUB_OUTPUT"
+
+      - name: Check
+        env:
+          ALLOW_NON_MODEL_CHANGES: ${{ contains(fromJSON(steps.labels.outputs.labels), 'allow-non-model-changes') }}
+          ALLOW_MODEL_CHANGES: ${{ inputs.modify_models == true }}
+        run: |
+          uv run --project rules --locked check-pr --rules rules --repo pr \
+            --base "origin/$BASE" --jar validator.jar

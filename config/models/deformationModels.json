@@ -1,0 +1,6 @@
+{
+  "name": "Deformation Model",
+  "path": "deformationModels",
+  "metaSchema": "config/schema/deformationModels.schema.json",
+  "validation": null
+}

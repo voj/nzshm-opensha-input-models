@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Fault model specific metadata",
+  "type": "object",
+  "required": ["modelName", "crustal", "partition"],
+  "properties": {
+    "modelName": {"type": "string", "minLength": 1},
+    "crustal": {"type": "boolean"},
+    "partition": {"enum": ["CRUSTAL", "HIKURANGI", "PUYSEGUR"]},
+    "parentSectionId": {"type": "integer"},
+    "tvzDomain": {"type": "string"}
+  }
+}

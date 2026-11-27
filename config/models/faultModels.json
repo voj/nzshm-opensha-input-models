@@ -1,0 +1,6 @@
+{
+  "name": "Fault Model",
+  "path": "faultModels",
+  "metaSchema": "config/schema/faultModels.schema.json",
+  "validation": null
+}
